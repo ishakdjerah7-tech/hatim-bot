@@ -1,66 +1,57 @@
 import os
-import json
-from telegram import Update, ChatPermissions
-from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
+from flask import Flask, request
+from telegram import Update, Bot, ChatPermissions
+from telegram.ext import Application, MessageHandler, filters, ContextTypes
 
 TOKEN = os.getenv("TOKEN")
+bot = Bot(token=TOKEN)
 
-bad_words = ["قع", "زب", "قحبة","نيك","نكمك", "بزازل"]
+app = Flask(__name__)
 
-DATA_FILE = "warnings.json"
+bad_words = ["سب", "كلمة1", "كلمة2"]
 
-def load_data():
-    try:
-        with open(DATA_FILE, "r") as f:
-            return json.load(f)
-    except:
-        return {}
+warnings = {}
 
-def save_data(data):
-    with open(DATA_FILE, "w") as f:
-        json.dump(data, f)
-
-warnings = load_data()
-
-async def moderate(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message
     if not message or not message.text:
         return
 
     user_id = str(message.from_user.id)
     chat_id = str(message.chat.id)
-
     key = f"{chat_id}_{user_id}"
+
     text = message.text.lower()
 
-    if any(word in text for word in bad_words):
+    if any(w in text for w in bad_words):
 
         warnings[key] = warnings.get(key, 0) + 1
-        save_data(warnings)
-
-        count = warnings[key]
 
         try:
             await message.delete()
         except:
             pass
 
-        if count == 1:
-            await message.chat.send_message("⚠️ إنذار 1")
-
-        elif count == 2:
-            await message.chat.send_message("⚠️ إنذار 2")
-
-        elif count >= 3:
+        if warnings[key] == 1:
+            await message.reply_text("⚠️ إنذار 1")
+        elif warnings[key] == 2:
+            await message.reply_text("⚠️ إنذار 2")
+        else:
             await message.chat.restrict_member(
                 message.from_user.id,
                 permissions=ChatPermissions(can_send_messages=False)
             )
-            await message.chat.send_message("🚫 تم كتمك نهائياً")
+            await message.reply_text("🚫 تم الكتم نهائياً")
 
-app = ApplicationBuilder().token(TOKEN).build()
+application = Application.builder().token(TOKEN).build()
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, moderate))
+@app.route("/", methods=["GET"])
+def home():
+    return "Bot is running"
 
-print("Bot is running...")
-app.run_polling()
+@app.route(f"/{TOKEN}", methods=["POST"])
+def webhook():
+    update = Update.de_json(request.get_json(force=True), bot)
+    application.update_queue.put_nowait(update)
+    return "ok"
