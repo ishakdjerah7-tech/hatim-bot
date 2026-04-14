@@ -8,7 +8,7 @@ bot = Bot(token=TOKEN)
 
 app = Flask(__name__)
 
-bad_words = ["سب", "كلمة1", "كلمة2"]
+bad_words = ["قع", "زب", "قحبة","نيك","نكمك", "بزازل"]
 
 warnings = {}
 
